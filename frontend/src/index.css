@@ -1,0 +1,281 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap');
+
+:root {
+  --primary: #102A43; /* Dark Blue - Military */
+  --primary-light: #243B53;
+  --secondary: #829AB1;
+  --accent: #D9E2EC;
+  --success: #198754;
+  --error: #dc3545;
+  --background: #0B1622;
+  --surface: rgba(36, 59, 83, 0.6);
+  --text-main: #F0F4F8;
+  --text-muted: #9FB3C8;
+  --border-color: rgba(217, 226, 236, 0.1);
+  --glass-bg: rgba(16, 42, 67, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  font-family: 'Cairo', sans-serif;
+  background-color: var(--background);
+  color: var(--text-main);
+  direction: rtl;
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Background animation */
+body::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(circle at 50% 0%, var(--primary-light) 0%, transparent 70%);
+  opacity: 0.5;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+/* Typography */
+h1, h2, h3 {
+  color: var(--text-main);
+  margin-bottom: 1rem;
+}
+
+h1 {
+  font-weight: 800;
+  font-size: 2.5rem;
+  text-align: center;
+  background: linear-gradient(to right, #fff, var(--secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+h2 {
+  font-size: 1.75rem;
+  color: var(--accent);
+}
+
+p {
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* Glassmorphism Surface */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.glass-panel:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
+}
+
+/* Buttons */
+.btn {
+  display: inline-block;
+  background: var(--primary-light);
+  color: #fff;
+  border: 1px solid var(--glass-border);
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-family: 'Cairo', sans-serif;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  text-align: center;
+}
+
+.btn:hover {
+  background: #2a4a69;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary-light), var(--primary));
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #2a4a69, var(--primary-light));
+}
+
+.btn-block {
+  display: block;
+  width: 100%;
+}
+
+/* Forms */
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.form-control {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: rgba(11, 22, 34, 0.5);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-family: 'Cairo', sans-serif;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: var(--secondary);
+  box-shadow: 0 0 0 3px rgba(130, 154, 177, 0.2);
+  background: rgba(11, 22, 34, 0.8);
+}
+
+.form-control::placeholder {
+  color: #4b5e71;
+}
+
+select.form-control {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239FB3C8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: left 1rem center;
+  background-size: 1em;
+}
+
+.form-error {
+  color: var(--error);
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  display: block;
+}
+
+/* Progress bar */
+.progress-container {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  position: relative;
+}
+
+.progress-container::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--border-color);
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+.progress-step {
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+  background: var(--background);
+  border: 2px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  z-index: 2;
+  color: var(--text-muted);
+  transition: all 0.3s ease;
+}
+
+.progress-step.active {
+  border-color: var(--secondary);
+  color: var(--text-main);
+  background: var(--primary-light);
+  box-shadow: 0 0 15px rgba(130, 154, 177, 0.4);
+}
+
+.progress-step.completed {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+}
+
+/* Logo */
+.logo-container {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.logo-container img {
+  max-width: 150px;
+  height: auto;
+  filter: drop-shadow(0 0 10px rgba(255,255,255,0.1));
+}
+
+/* Utilities */
+.text-center { text-align: center; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-4 { margin-top: 1.5rem; }
+.mb-2 { margin-bottom: 0.5rem; }
+.mb-4 { margin-bottom: 1.5rem; }
+
+.flex { display: flex; }
+.justify-between { justify-content: space-between; }
+.gap-4 { gap: 1rem; }
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print { .no-print { display: none !important; } }
+
+body.light-mode {
+  --primary: #0F5298;
+  --primary-light: #2563EB;
+  --secondary: #3B82F6;
+  --accent: #1E3A8A;
+  --success: #10B981;
+  --error: #EF4444;
+  --background: #F3F4F6;
+  --surface: rgba(255, 255, 255, 0.8);
+  --text-main: #111827;
+  --text-muted: #4B5563;
+  --border-color: rgba(0, 0, 0, 0.1);
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(0, 0, 0, 0.1);
+}
