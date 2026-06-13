@@ -1,58 +1,71 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import axios from 'axios';
+import api from '../api';
 
-const RegisterGrade1 = () => {
+const PHONE_PATTERN = { value: /^01[0125][0-9]{8}$/, message: 'رقم هاتف مصري غير صحيح' };
+
+// استخلاص البيانات من الرقم القومي المصري + حساب السن في 1 أكتوبر
+const getDerivedData = (nid) => {
+  if (!nid || nid.length !== 14) return null;
+  const century = nid[0] === '2' ? '19' : '20';
+  const year = century + nid.substring(1, 3);
+  const month = nid.substring(3, 5);
+  const day = nid.substring(5, 7);
+  const birthdate = `${year}-${month}-${day}`;
+
+  const genderDigit = parseInt(nid[12], 10);
+  const gender = genderDigit % 2 === 0 ? 'أنثى' : 'ذكر';
+
+  const bd = new Date(birthdate);
+  if (isNaN(bd.getTime())) return null; // تاريخ غير صالح
+
+  // يناير–سبتمبر = أكتوبر السنة الحالية، أكتوبر–ديسمبر = أكتوبر السنة القادمة
+  const now = new Date();
+  const refYear = now.getMonth() >= 9 ? now.getFullYear() + 1 : now.getFullYear();
+  const oct1 = new Date(`${refYear}-10-01`);
+
+  let years = oct1.getFullYear() - bd.getFullYear();
+  let months = oct1.getMonth() - bd.getMonth();
+  let days = oct1.getDate() - bd.getDate();
+
+  if (days < 0) {
+    months--;
+    const prevMonth = new Date(oct1.getFullYear(), oct1.getMonth(), 0).getDate();
+    days += prevMonth;
+  }
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+
+  return { birthdate, gender, ageYears: years, ageMonths: months, ageDays: days };
+};
+
+/**
+ * نموذج تسجيل موحّد للصف الأول والثاني. يُمرَّر grade (1 أو 2).
+ * الفرق الوحيد: الصف الأول يطلب بيانات الإعدادية، والثاني يطلب الشعبة.
+ */
+const StudentRegistrationForm = ({ grade }) => {
   const [step, setStep] = useState(1);
   const navigate = useNavigate();
   const { register, handleSubmit, formState: { errors }, watch, trigger } = useForm();
-  
+
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState('');
   const [successData, setSuccessData] = useState(null);
 
+  const gradeLabel = grade === 1 ? 'الأول الثانوي' : 'الثاني الثانوي';
   const nationalId = watch('national_id');
-
-  // Derive data from National ID
-  const getDerivedData = (nid) => {
-    if (!nid || nid.length !== 14) return null;
-    const century = nid[0] === '2' ? '19' : '20';
-    const year = century + nid.substring(1, 3);
-    const month = nid.substring(3, 5);
-    const day = nid.substring(5, 7);
-    const birthdate = `${year}-${month}-${day}`;
-    
-    const genderDigit = parseInt(nid[12], 10);
-    const gender = genderDigit % 2 === 0 ? 'أنثى' : 'ذكر';
-    
-    const currentYear = new Date().getFullYear();
-    const oct1 = new Date(`${currentYear}-10-01`);
-    const bd = new Date(birthdate);
-    
-    let years = oct1.getFullYear() - bd.getFullYear();
-    let months = oct1.getMonth() - bd.getMonth();
-    let days = oct1.getDate() - bd.getDate();
-
-    if (days < 0) {
-      months--;
-      const prevMonth = new Date(oct1.getFullYear(), oct1.getMonth(), 0).getDate();
-      days += prevMonth;
-    }
-    if (months < 0) {
-      years--;
-      months += 12;
-    }
-
-    return { birthdate, gender, ageYears: years, ageMonths: months, ageDays: days };
-  };
-
   const derived = getDerivedData(nationalId);
 
   const nextStep = async () => {
     let fieldsToValidate = [];
     if (step === 1) {
-      fieldsToValidate = ['first_name', 'father_name', 'grandfather_name', 'family_name', 'national_id', 'nationality', 'religion', 'phone', 'second_language', 'address_village', 'address_center', 'address_gov', 'prep_total', 'prep_school', 'prep_seat_no'];
+      fieldsToValidate = ['first_name', 'father_name', 'grandfather_name', 'family_name', 'national_id', 'nationality', 'religion', 'phone', 'second_language', 'address_village', 'address_center', 'address_gov'];
+      fieldsToValidate = grade === 1
+        ? [...fieldsToValidate, 'prep_total', 'prep_school', 'prep_seat_no']
+        : [...fieldsToValidate, 'branch'];
     } else if (step === 2) {
       fieldsToValidate = ['parent_first_name', 'parent_father_name', 'parent_grandfather_name', 'parent_family_name', 'parent_job', 'parent_phone'];
     } else if (step === 3) {
@@ -62,21 +75,17 @@ const RegisterGrade1 = () => {
     }
 
     const isStepValid = await trigger(fieldsToValidate);
-    if (isStepValid) {
-      setStep(prev => prev + 1);
-    }
+    if (isStepValid) setStep((prev) => prev + 1);
   };
 
-  const prevStep = () => {
-    setStep(prev => prev - 1);
-  };
+  const prevStep = () => setStep((prev) => prev - 1);
 
   const onSubmit = async (data) => {
     setLoading(true);
     setServerError('');
     try {
-      const payload = { ...data, grade: 1 };
-      const response = await axios.post('http://localhost:8001/api/register', payload);
+      const payload = { ...data, grade };
+      const response = await api.post('/register', payload);
       setSuccessData(response.data);
     } catch (err) {
       setServerError(err.response?.data?.message || 'حدث خطأ غير متوقع');
@@ -85,9 +94,7 @@ const RegisterGrade1 = () => {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
 
   const handleDownloadTxt = () => {
     const text = `
@@ -100,11 +107,11 @@ const RegisterGrade1 = () => {
 ------------------------------------------------
 اسم الطالب: ${successData.student_name}
 تاريخ ووقت التسجيل: ${successData.registered_at}
-الصف الدراسي: الأول الثانوي
+الصف الدراسي: ${gradeLabel}
 
-بيانات الدخول للنظام (يرجى الاحتفاظ بها):
+بيانات الدخول للنظام:
 رقم الهاتف: ${successData.phone}
-كلمة المرور: ${successData.password}
+سيتم إرسال كلمة المرور عبر واتساب إلى هذا الرقم.
     `.trim();
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     const link = document.createElement('a');
@@ -117,7 +124,6 @@ const RegisterGrade1 = () => {
     return (
       <div className="container mt-4">
         <div className="glass-panel" id="printable-receipt" style={{ padding: '40px', maxWidth: '700px', margin: '0 auto', backgroundColor: '#fff', color: '#000' }}>
-          
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #ccc', paddingBottom: '20px', marginBottom: '20px' }}>
             <div style={{ textAlign: 'right', fontWeight: 'bold' }}>
               <p style={{ margin: 0 }}>محافظة المنوفية</p>
@@ -139,22 +145,16 @@ const RegisterGrade1 = () => {
             <h4 style={{ margin: '0 0 15px', color: '#333', borderBottom: '1px solid #ccc', paddingBottom: '10px' }}>بيانات الطالب والدخول</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '1.1rem' }}>
               <div><strong>اسم الطالب:</strong> {successData.student_name}</div>
-              <div><strong>الصف الدراسي:</strong> الأول الثانوي</div>
+              <div><strong>الصف الدراسي:</strong> {gradeLabel}</div>
               <div style={{ marginTop: '10px' }}><strong>رقم الهاتف (للدخول):</strong> <span dir="ltr">{successData.phone}</span></div>
-              <div><strong>كلمة المرور:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', backgroundColor: '#eee', padding: '2px 8px', borderRadius: '4px' }} dir="ltr">{successData.password}</span></div>
+              <div style={{ marginTop: '10px', color: '#1a7a3a', fontWeight: 'bold' }}>📲 سيتم إرسال كلمة المرور عبر واتساب إلى الرقم المختار.</div>
             </div>
           </div>
 
           <div className="text-center no-print" style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
-            <button className="btn btn-primary" onClick={handlePrint}>
-              طباعة الإيصال
-            </button>
-            <button className="btn" style={{ backgroundColor: '#34495e', color: 'white' }} onClick={handleDownloadTxt}>
-              تنزيل كملف نصي
-            </button>
-            <button className="btn" onClick={() => navigate('/')}>
-              العودة للرئيسية
-            </button>
+            <button className="btn btn-primary" onClick={handlePrint}>طباعة الإيصال</button>
+            <button className="btn" style={{ backgroundColor: '#34495e', color: 'white' }} onClick={handleDownloadTxt}>تنزيل كملف نصي</button>
+            <button className="btn" onClick={() => navigate('/')}>العودة للرئيسية</button>
           </div>
         </div>
       </div>
@@ -164,8 +164,8 @@ const RegisterGrade1 = () => {
   return (
     <div className="container mt-4">
       <div className="glass-panel">
-        <h2 className="text-center mb-4">نموذج التسجيل - الصف الأول الثانوي</h2>
-        
+        <h2 className="text-center mb-4">نموذج التسجيل - {gradeLabel}</h2>
+
         {serverError && <div className="form-error text-center mb-4">{serverError}</div>}
 
         <div className="progress-container">
@@ -177,7 +177,6 @@ const RegisterGrade1 = () => {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)}>
-          
           {step === 1 && (
             <div>
               <h3>البيانات الشخصية للطالب</h3>
@@ -221,7 +220,7 @@ const RegisterGrade1 = () => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">السن في 1 أكتوبر</label>
-                  <div style={{display: 'flex', gap: '10px'}}>
+                  <div style={{ display: 'flex', gap: '10px' }}>
                     <input className="form-control" value={derived ? `${derived.ageYears} سنة` : ''} readOnly disabled placeholder="سنة" />
                     <input className="form-control" value={derived ? `${derived.ageMonths} شهر` : ''} readOnly disabled placeholder="شهر" />
                     <input className="form-control" value={derived ? `${derived.ageDays} يوم` : ''} readOnly disabled placeholder="يوم" />
@@ -229,7 +228,7 @@ const RegisterGrade1 = () => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">رقم تليفون الطالب</label>
-                  <input className="form-control" {...register('phone', { required: 'مطلوب', pattern: { value: /^01[0125][0-9]{8}$/, message: 'رقم هاتف مصري غير صحيح' } })} />
+                  <input className="form-control" {...register('phone', { required: 'مطلوب', pattern: PHONE_PATTERN })} />
                   {errors.phone && <span className="form-error">{errors.phone.message}</span>}
                 </div>
                 <div className="form-group">
@@ -262,7 +261,7 @@ const RegisterGrade1 = () => {
                 </div>
               </div>
 
-              <h4 className="mt-4 mb-2" style={{color: 'var(--accent)'}}>العنوان بالتفصيل</h4>
+              <h4 className="mt-4 mb-2" style={{ color: 'var(--accent)' }}>العنوان بالتفصيل</h4>
               <div className="grid-2">
                 <div className="form-group">
                   <label className="form-label">الشياخة / القرية</label>
@@ -278,21 +277,44 @@ const RegisterGrade1 = () => {
                 </div>
               </div>
 
-              <h4 className="mt-4 mb-2" style={{color: 'var(--accent)'}}>بيانات الإعدادية</h4>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">مجموع الإعدادية</label>
-                  <input type="number" step="0.5" className="form-control" {...register('prep_total', { required: 'مطلوب' })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">اسم مدرسة الإعدادية</label>
-                  <input className="form-control" {...register('prep_school', { required: 'مطلوب' })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">رقم الجلوس</label>
-                  <input className="form-control" {...register('prep_seat_no', { required: 'مطلوب' })} />
-                </div>
-              </div>
+              {grade === 1 ? (
+                <>
+                  <h4 className="mt-4 mb-2" style={{ color: 'var(--accent)' }}>بيانات الإعدادية</h4>
+                  <div className="grid-2">
+                    <div className="form-group">
+                      <label className="form-label">مجموع الإعدادية</label>
+                      <input type="number" step="0.5" className="form-control" {...register('prep_total', { required: 'مطلوب' })} />
+                      {errors.prep_total && <span className="form-error">{errors.prep_total.message}</span>}
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">اسم مدرسة الإعدادية</label>
+                      <input className="form-control" {...register('prep_school', { required: 'مطلوب' })} />
+                      {errors.prep_school && <span className="form-error">{errors.prep_school.message}</span>}
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">رقم الجلوس</label>
+                      <input className="form-control" {...register('prep_seat_no', { required: 'مطلوب' })} />
+                      {errors.prep_seat_no && <span className="form-error">{errors.prep_seat_no.message}</span>}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h4 className="mt-4 mb-2" style={{ color: 'var(--accent)' }}>الشعبة / التخصص</h4>
+                  <div className="grid-2">
+                    <div className="form-group">
+                      <label className="form-label">الشعبة المرغوبة</label>
+                      <select className="form-control" {...register('branch', { required: 'مطلوب' })}>
+                        <option value="">اختر...</option>
+                        <option value="science_science">علمي علوم</option>
+                        <option value="science_math">علمي رياضة</option>
+                        <option value="arts">أدبي</option>
+                      </select>
+                      {errors.branch && <span className="form-error">{errors.branch.message}</span>}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -326,7 +348,7 @@ const RegisterGrade1 = () => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">رقم التليفون</label>
-                  <input className="form-control" {...register('parent_phone', { required: 'مطلوب', pattern: { value: /^01[0125][0-9]{8}$/, message: 'رقم غير صحيح' } })} />
+                  <input className="form-control" {...register('parent_phone', { required: 'مطلوب', pattern: PHONE_PATTERN })} />
                   {errors.parent_phone && <span className="form-error">{errors.parent_phone.message}</span>}
                 </div>
               </div>
@@ -363,7 +385,7 @@ const RegisterGrade1 = () => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">رقم التليفون</label>
-                  <input className="form-control" {...register('mother_phone', { required: 'مطلوب', pattern: { value: /^01[0125][0-9]{8}$/, message: 'رقم غير صحيح' } })} />
+                  <input className="form-control" {...register('mother_phone', { required: 'مطلوب', pattern: PHONE_PATTERN })} />
                   {errors.mother_phone && <span className="form-error">{errors.mother_phone.message}</span>}
                 </div>
               </div>
@@ -400,7 +422,7 @@ const RegisterGrade1 = () => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">رقم التليفون</label>
-                  <input className="form-control" {...register('contact_phone', { required: 'مطلوب', pattern: { value: /^01[0125][0-9]{8}$/, message: 'رقم غير صحيح' } })} />
+                  <input className="form-control" {...register('contact_phone', { required: 'مطلوب', pattern: PHONE_PATTERN })} />
                   {errors.contact_phone && <span className="form-error">{errors.contact_phone.message}</span>}
                 </div>
               </div>
@@ -411,7 +433,7 @@ const RegisterGrade1 = () => {
             <div>
               <h3>تأكيد البيانات واختيار رقم التواصل الرئيسي</h3>
               <p>يرجى اختيار الرقم الذي سيستخدم في الدخول للنظام (يفضل أن يكون عليه واتساب).</p>
-              
+
               <div className="form-group mt-4">
                 <label className="form-label">الرقم الرئيسي</label>
                 <select className="form-control" {...register('main_contact_phone', { required: 'مطلوب' })}>
@@ -423,6 +445,22 @@ const RegisterGrade1 = () => {
                 </select>
                 {errors.main_contact_phone && <span className="form-error">{errors.main_contact_phone.message}</span>}
               </div>
+
+              <div className="form-group mt-3" style={{ textAlign: 'right' }}>
+                <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', cursor: 'pointer' }}>
+                  <input type="checkbox" {...register('whatsapp_confirmed', { required: 'يجب تأكيد توفّر واتساب على الرقم' })} />
+                  <span>أؤكد أن خدمة واتساب متوفرة على الرقم المختار لاستلام بيانات الدخول.</span>
+                </label>
+                {errors.whatsapp_confirmed && <span className="form-error">{errors.whatsapp_confirmed.message}</span>}
+              </div>
+
+              <div className="form-group mt-2" style={{ textAlign: 'right' }}>
+                <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', cursor: 'pointer' }}>
+                  <input type="checkbox" {...register('consent', { required: 'يجب الموافقة قبل الإرسال' })} />
+                  <span>أقرّ بصحة البيانات المُدخلة وأوافق على معالجتها لغرض التسجيل بالمدرسة.</span>
+                </label>
+                {errors.consent && <span className="form-error">{errors.consent.message}</span>}
+              </div>
             </div>
           )}
 
@@ -430,7 +468,7 @@ const RegisterGrade1 = () => {
             {step > 1 ? (
               <button type="button" className="btn" onClick={prevStep}>السابق</button>
             ) : <div></div>}
-            
+
             {step < 5 ? (
               <button type="button" className="btn btn-primary" onClick={nextStep}>التالي</button>
             ) : (
@@ -445,4 +483,4 @@ const RegisterGrade1 = () => {
   );
 };
 
-export default RegisterGrade1;
+export default StudentRegistrationForm;

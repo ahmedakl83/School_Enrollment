@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import { createContext, useContext, useState, useEffect } from 'react';
+import api, { setAuthToken } from '../api';
 
 const AuthContext = createContext();
 
@@ -10,18 +10,23 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('token') || null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      fetchUser();
-    } else {
-      setLoading(false);
-    }
-  }, [token]);
+  const login = (userData, authToken) => {
+    setUser(userData);
+    setToken(authToken);
+    localStorage.setItem('token', authToken);
+    setAuthToken(authToken);
+  };
+
+  const logout = () => {
+    setUser(null);
+    setToken(null);
+    localStorage.removeItem('token');
+    setAuthToken(null);
+  };
 
   const fetchUser = async () => {
     try {
-      const response = await axios.get('http://localhost:8001/api/user');
+      const response = await api.get('/user');
       setUser(response.data);
     } catch (error) {
       console.error('Error fetching user', error);
@@ -31,19 +36,29 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = (userData, authToken) => {
-    setUser(userData);
-    setToken(authToken);
-    localStorage.setItem('token', authToken);
-    axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
-  };
+  useEffect(() => {
+    if (token) {
+      setAuthToken(token);
+      fetchUser();
+    } else {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('token');
-    delete axios.defaults.headers.common['Authorization'];
-  };
+  // عند انتهاء صلاحية التوكن أو إبطاله (401) يتم تسجيل الخروج تلقائياً
+  useEffect(() => {
+    const interceptor = api.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          logout();
+        }
+        return Promise.reject(error);
+      }
+    );
+    return () => api.interceptors.response.eject(interceptor);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, token, loading, login, logout }}>

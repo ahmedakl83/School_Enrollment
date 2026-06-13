@@ -41,7 +41,6 @@ class NewEnrollmentNotification extends Notification
         return [
             'student_id' => $this->student->id,
             'student_name' => $this->student->first_name . ' ' . $this->student->father_name,
-            'national_id' => $this->student->national_id,
             'grade' => $this->student->grade,
             'message' => 'تم تسجيل طلب التحاق جديد للطالب: ' . $this->student->first_name . ' ' . $this->student->father_name,
         ];

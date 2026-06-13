@@ -3,168 +3,31 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\RegisterStudentRequest;
+use App\Services\StudentService;
 use Illuminate\Http\Request;
 use App\Models\Student;
-use App\Models\User;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class StudentController extends Controller
 {
-    public function register(Request $request)
+    public function __construct(private StudentService $students) {}
+
+    public function register(RegisterStudentRequest $request)
     {
-        $validated = $request->validate([
-            'grade' => 'required|in:1,2',
-            'first_name' => 'required|string|max:100',
-            'father_name' => 'required|string|max:100',
-            'grandfather_name' => 'required|string|max:100',
-            'family_name' => 'required|string|max:100',
-            'national_id' => 'required|string|size:14|unique:students,national_id',
-            'student_code' => 'nullable|string|max:50',
-            'nationality' => 'required|in:egyptian,other',
-            'religion' => 'required|in:muslim,christian',
-            'phone' => 'required|string|size:11|unique:students,phone|starts_with:010,011,012,015',
-            'second_language' => 'required|in:french,german,italian',
-            'address_village' => 'required|string|max:200',
-            'address_center' => 'required|string|max:200',
-            'address_gov' => 'required|string|max:100',
-            
-            // Grade 1 only
-            'prep_total' => 'required_if:grade,1|nullable|numeric',
-            'prep_school' => 'required_if:grade,1|nullable|string|max:200',
-            'prep_seat_no' => 'required_if:grade,1|nullable|string|max:50',
-            
-            // Grade 2 only
-            'branch' => 'required_if:grade,2|nullable|string|max:100',
-
-            // Parent Data
-            'parent_first_name' => 'required|string|max:100',
-            'parent_father_name' => 'required|string|max:100',
-            'parent_grandfather_name' => 'required|string|max:100',
-            'parent_family_name' => 'required|string|max:100',
-            'parent_job' => 'required|string|max:100',
-            'parent_phone' => 'required|string|size:11|starts_with:010,011,012,015',
-
-            // Mother Data
-            'mother_first_name' => 'required|string|max:100',
-            'mother_father_name' => 'required|string|max:100',
-            'mother_grandfather_name' => 'required|string|max:100',
-            'mother_family_name' => 'required|string|max:100',
-            'mother_job' => 'required|string|max:100',
-            'mother_phone' => 'required|string|size:11|starts_with:010,011,012,015',
-
-            // Contact Data
-            'contact_first_name' => 'required|string|max:100',
-            'contact_father_name' => 'required|string|max:100',
-            'contact_grandfather_name' => 'required|string|max:100',
-            'contact_family_name' => 'required|string|max:100',
-            'contact_relation' => 'required|string|max:100',
-            'contact_phone' => 'required|string|size:11|starts_with:010,011,012,015',
-
-            // Auth Data
-            'main_contact_phone' => 'required|string|size:11',
-        ]);
-
         try {
-            DB::beginTransaction();
-
-            // Extract logic from national_id
-            $century = substr($validated['national_id'], 0, 1) == '2' ? '19' : '20';
-            $year = $century . substr($validated['national_id'], 1, 2);
-            $month = substr($validated['national_id'], 3, 2);
-            $day = substr($validated['national_id'], 5, 2);
-            $birthdate = "$year-$month-$day";
-
-            $genderDigit = substr($validated['national_id'], 12, 1);
-            $gender = ($genderDigit % 2 == 0) ? 'female' : 'male';
-
-            $student = Student::create([
-                'grade' => $validated['grade'],
-                'first_name' => $validated['first_name'],
-                'father_name' => $validated['father_name'],
-                'grandfather_name' => $validated['grandfather_name'],
-                'family_name' => $validated['family_name'],
-                'national_id' => $validated['national_id'],
-                'gender' => $gender,
-                'student_code' => $validated['student_code'] ?? null,
-                'birthdate' => $birthdate,
-                'nationality' => $validated['nationality'],
-                'religion' => $validated['religion'],
-                'phone' => $validated['phone'],
-                'second_language' => $validated['second_language'],
-                'address_village' => $validated['address_village'],
-                'address_center' => $validated['address_center'],
-                'address_gov' => $validated['address_gov'],
-                'prep_total' => $validated['prep_total'] ?? null,
-                'prep_school' => $validated['prep_school'] ?? null,
-                'prep_seat_no' => $validated['prep_seat_no'] ?? null,
-                'branch' => $validated['branch'] ?? null,
-            ]);
-
-            $student->parent()->create([
-                'first_name' => $validated['parent_first_name'],
-                'father_name' => $validated['parent_father_name'],
-                'grandfather_name' => $validated['parent_grandfather_name'],
-                'family_name' => $validated['parent_family_name'],
-                'job' => $validated['parent_job'],
-                'phone' => $validated['parent_phone'],
-            ]);
-
-            $student->mother()->create([
-                'first_name' => $validated['mother_first_name'],
-                'father_name' => $validated['mother_father_name'],
-                'grandfather_name' => $validated['mother_grandfather_name'],
-                'family_name' => $validated['mother_family_name'],
-                'job' => $validated['mother_job'],
-                'phone' => $validated['mother_phone'],
-            ]);
-
-            $student->contact()->create([
-                'first_name' => $validated['contact_first_name'],
-                'father_name' => $validated['contact_father_name'],
-                'grandfather_name' => $validated['contact_grandfather_name'],
-                'family_name' => $validated['contact_family_name'],
-                'relation' => $validated['contact_relation'],
-                'phone' => $validated['contact_phone'],
-            ]);
-
-            // User creation
-            $password = Str::random(10) . '@A1'; // Generate strong password
-            
-            $user = User::firstOrCreate(
-                ['phone' => $validated['main_contact_phone']],
-                [
-                    'name' => $validated['father_name'] . ' ' . $validated['grandfather_name'],
-                    'password' => Hash::make($password),
-                    'role' => 'parent',
-                ]
-            );
-
-            $student->update(['user_id' => $user->id]);
-
-            // Notify Admins
-            $admins = User::where('role', 'admin')->get();
-            \Illuminate\Support\Facades\Notification::send($admins, new \App\Notifications\NewEnrollmentNotification($student));
-
-            // Send WhatsApp message to User
-            // \App\Services\WhatsAppService::sendMessage($validated['main_contact_phone'], $message);
-
-            DB::commit();
-
-            return response()->json([
-                'message' => 'تم التسجيل بنجاح. يرجى الاحتفاظ ببيانات الدخول للاستعلام عن حالة الطلب.',
-                'phone' => $validated['main_contact_phone'],
-                'password' => $password,
-                'registered_at' => now()->format('Y-m-d h:i A'),
-                'student_name' => $validated['first_name'] . ' ' . $validated['father_name'] . ' ' . $validated['grandfather_name'] . ' ' . $validated['family_name'],
-            ], 201);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
+            $student = $this->students->register($request->validated());
+        } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('Registration Error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return response()->json(['message' => 'حدث خطأ أثناء التسجيل', 'error' => $e->getMessage()], 500);
+            return response()->json(['message' => 'حدث خطأ أثناء التسجيل. يرجى المحاولة لاحقاً.'], 500);
         }
+
+        return response()->json([
+            'message' => 'تم التسجيل بنجاح. سيتم إرسال بيانات الدخول (كلمة المرور) عبر واتساب إلى الرقم المختار. يرجى الاحتفاظ بها للاستعلام عن حالة الطلب.',
+            'phone' => $student->user?->phone,
+            'registered_at' => $student->created_at->format('Y-m-d h:i A'),
+            'student_name' => "{$student->first_name} {$student->father_name} {$student->grandfather_name} {$student->family_name}",
+        ], 201);
     }
 
     public function myStudent(Request $request)
@@ -174,5 +37,115 @@ class StudentController extends Controller
             return response()->json(['message' => 'لم يتم العثور على طالب مرتبط بهذا الحساب'], 404);
         }
         return response()->json($student);
+    }
+
+    /**
+     * عرض بيانات طالب — مع فحص الملكية لمنع IDOR.
+     * ولي الأمر يرى طالبه فقط؛ الأدمن يرى الجميع.
+     */
+    public function show(Request $request, $id)
+    {
+        $student = Student::with(['parent', 'mother', 'contact'])->findOrFail($id);
+
+        if (! $this->canAccess($request->user(), $student)) {
+            return response()->json(['message' => 'غير مصرّح لك بالوصول إلى هذا الطلب'], 403);
+        }
+
+        return response()->json($student);
+    }
+
+    /**
+     * تعديل بيانات طالب — مع فحص الملكية. الحقول الحساسة (status, user_id, national_id, gender)
+     * غير قابلة للتعديل من هذا المسار.
+     */
+    public function update(Request $request, $id)
+    {
+        $student = Student::with(['parent', 'mother', 'contact'])->findOrFail($id);
+
+        if (! $this->canAccess($request->user(), $student)) {
+            return response()->json(['message' => 'غير مصرّح لك بتعديل هذا الطلب'], 403);
+        }
+
+        $validated = $request->validate([
+            'first_name' => 'sometimes|string|max:100',
+            'father_name' => 'sometimes|string|max:100',
+            'grandfather_name' => 'sometimes|string|max:100',
+            'family_name' => 'sometimes|string|max:100',
+            'student_code' => 'nullable|string|max:50',
+            'nationality' => 'sometimes|in:egyptian,other',
+            'religion' => 'sometimes|in:muslim,christian',
+            'phone' => 'sometimes|string|size:11|starts_with:010,011,012,015|unique:students,phone,' . $student->id,
+            'second_language' => 'sometimes|in:french,german,italian',
+            'address_village' => 'sometimes|string|max:200',
+            'address_center' => 'sometimes|string|max:200',
+            'address_gov' => 'sometimes|string|max:100',
+            'prep_total' => 'nullable|numeric',
+            'prep_school' => 'nullable|string|max:200',
+            'prep_seat_no' => 'nullable|string|max:50',
+            'branch' => 'nullable|string|max:100',
+
+            'parent' => 'sometimes|array',
+            'parent.first_name' => 'sometimes|string|max:100',
+            'parent.father_name' => 'sometimes|string|max:100',
+            'parent.grandfather_name' => 'sometimes|string|max:100',
+            'parent.family_name' => 'sometimes|string|max:100',
+            'parent.job' => 'sometimes|string|max:100',
+            'parent.phone' => 'sometimes|string|size:11|starts_with:010,011,012,015',
+
+            'mother' => 'sometimes|array',
+            'mother.first_name' => 'sometimes|string|max:100',
+            'mother.father_name' => 'sometimes|string|max:100',
+            'mother.grandfather_name' => 'sometimes|string|max:100',
+            'mother.family_name' => 'sometimes|string|max:100',
+            'mother.job' => 'sometimes|string|max:100',
+            'mother.phone' => 'sometimes|string|size:11|starts_with:010,011,012,015',
+
+            'contact' => 'sometimes|array',
+            'contact.first_name' => 'sometimes|string|max:100',
+            'contact.father_name' => 'sometimes|string|max:100',
+            'contact.grandfather_name' => 'sometimes|string|max:100',
+            'contact.family_name' => 'sometimes|string|max:100',
+            'contact.relation' => 'sometimes|string|max:100',
+            'contact.phone' => 'sometimes|string|size:11|starts_with:010,011,012,015',
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            $student->fill(collect($validated)->except(['parent', 'mother', 'contact'])->toArray());
+            $student->save();
+
+            if (!empty($validated['parent'])) {
+                $student->parent()->update($validated['parent']);
+            }
+            if (!empty($validated['mother'])) {
+                $student->mother()->update($validated['mother']);
+            }
+            if (!empty($validated['contact'])) {
+                $student->contact()->update($validated['contact']);
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Illuminate\Support\Facades\Log::error('Student Update Error: ' . $e->getMessage());
+            return response()->json(['message' => 'حدث خطأ أثناء تعديل البيانات. يرجى المحاولة لاحقاً.'], 500);
+        }
+
+        return response()->json([
+            'message' => 'تم تحديث البيانات بنجاح',
+            'student' => $student->fresh(['parent', 'mother', 'contact']),
+        ]);
+    }
+
+    /**
+     * يحدد إن كان المستخدم مخوّلاً للوصول لطالب معيّن: الأدمن أو مالك الطلب فقط.
+     */
+    private function canAccess($user, Student $student): bool
+    {
+        if (! $user) {
+            return false;
+        }
+        return $user->role === 'admin' || $student->user_id === $user->id;
     }
 }

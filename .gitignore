@@ -1,0 +1,7 @@
+# أدوات محلية
+.claude/
+.DS_Store
+
+# بيئة
+*.env
+!*.env.example

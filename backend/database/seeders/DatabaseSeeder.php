@@ -15,11 +15,23 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        User::create([
-            'name' => 'مدير النظام',
-            'phone' => '01006898681',
-            'role' => 'admin',
-            'password' => \Illuminate\Support\Facades\Hash::make('Essam Soliman#20@'),
-        ]);
+        $phone = env('ADMIN_PHONE', '01006898681');
+        $password = env('ADMIN_PASSWORD');
+
+        if (empty($password)) {
+            // لا تزرع حساب أدمن بكلمة مرور افتراضية. يجب ضبط ADMIN_PASSWORD في .env
+            $this->command?->warn('تم تخطّي زرع حساب الأدمن: اضبط ADMIN_PASSWORD في .env ثم أعد التشغيل.');
+            return;
+        }
+
+        User::updateOrCreate(
+            ['phone' => $phone],
+            [
+                'name' => 'مدير النظام',
+                'role' => 'admin',
+                'password' => \Illuminate\Support\Facades\Hash::make($password),
+                'must_change_password' => true,
+            ]
+        );
     }
 }

@@ -1,9 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+
+// خريطة عرض الشعبة (مفاتيح ثابتة ↔ تسمية عربية)
+const BRANCH_LABELS = {
+  science_science: 'علمي علوم',
+  science_math: 'علمي رياضة',
+  arts: 'أدبي',
+};
+const branchLabel = (v) => BRANCH_LABELS[v] || '';
 
 const AdminDashboard = () => {
   const { user, logout } = useAuth();
@@ -15,6 +23,13 @@ const AdminDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [gradeFilter, setGradeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [govFilter, setGovFilter] = useState('');
+  const [langFilter, setLangFilter] = useState('all');
+  const [branchFilter, setBranchFilter] = useState('all');
+  const [nationalityFilter, setNationalityFilter] = useState('all');
+  const [religionFilter, setReligionFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   // Modal State
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -25,8 +40,10 @@ const AdminDashboard = () => {
 
   const fetchStudents = async () => {
     try {
-      const response = await axios.get('http://localhost:8001/api/admin/students');
-      setStudents(response.data);
+      // مدرسة واحدة: نجلب كل الطلبات (per_page كبير) ونفلتر/نُصدّر في الواجهة
+      const response = await api.get('/admin/students', { params: { per_page: 1000 } });
+      // الاستجابة مُقسّمة صفحات: البيانات في data.data
+      setStudents(response.data.data ?? response.data);
     } catch (err) {
       console.error(err);
     } finally {
@@ -42,12 +59,12 @@ const AdminDashboard = () => {
   const updateStatus = async (id, status) => {
     if (!window.confirm(`هل أنت متأكد من تحويل حالة الطلب إلى "${status === 'accepted' ? 'مقبول' : 'مرفوض'}"؟`)) return;
     try {
-      await axios.put(`http://localhost:8001/api/admin/student/${id}/status`, { status });
+      await api.put(`/admin/student/${id}/status`, { status });
       fetchStudents(); // refresh
       if (selectedStudent && selectedStudent.id === id) {
         setSelectedStudent({ ...selectedStudent, status });
       }
-    } catch (err) {
+    } catch {
       alert('حدث خطأ أثناء تغيير الحالة');
     }
   };
@@ -55,12 +72,12 @@ const AdminDashboard = () => {
   const deleteStudent = async (id) => {
     if (!window.confirm('هل أنت متأكد من حذف هذا الطلب نهائياً؟')) return;
     try {
-      await axios.delete(`http://localhost:8001/api/admin/student/${id}`);
+      await api.delete(`/admin/student/${id}`);
       fetchStudents(); // refresh
       if (selectedStudent && selectedStudent.id === id) {
         setSelectedStudent(null);
       }
-    } catch (err) {
+    } catch {
       alert('حدث خطأ أثناء الحذف');
     }
   };
@@ -133,7 +150,7 @@ const AdminDashboard = () => {
       'المدرسة الإعدادية': s.prep_school || '',
       'مجموع الإعدادية': s.prep_total || '',
       'رقم جلوس الإعدادية': s.prep_seat_no || '',
-      'الشعبة المرجوة': s.branch === 'science' ? 'علمي' : s.branch === 'arts' ? 'أدبي' : '',
+      'الشعبة المرجوة': branchLabel(s.branch),
       'اسم ولي الأمر': `${s.parent?.first_name || ''} ${s.parent?.father_name || ''} ${s.parent?.grandfather_name || ''} ${s.parent?.family_name || ''}`.trim(),
       'وظيفة ولي الأمر': s.parent?.job || '',
       'رقم هاتف ولي الأمر': s.parent?.phone || '',
@@ -161,11 +178,26 @@ const AdminDashboard = () => {
   // Filter Logic
   const filteredStudents = students.filter(s => {
     const fullName = `${s.first_name} ${s.father_name} ${s.grandfather_name} ${s.family_name}`;
-    const matchesSearch = fullName.includes(searchQuery) || s.national_id.includes(searchQuery);
+    const matchesSearch = fullName.includes(searchQuery) || (s.national_id || '').includes(searchQuery) || (s.phone || '').includes(searchQuery);
     const matchesGrade = gradeFilter === 'all' || s.grade === gradeFilter;
     const matchesStatus = statusFilter === 'all' || s.status === statusFilter;
-    return matchesSearch && matchesGrade && matchesStatus;
+    const matchesGov = !govFilter || (s.address_gov || '').includes(govFilter);
+    const matchesLang = langFilter === 'all' || s.second_language === langFilter;
+    const matchesBranch = branchFilter === 'all' || s.branch === branchFilter;
+    const matchesNationality = nationalityFilter === 'all' || s.nationality === nationalityFilter;
+    const matchesReligion = religionFilter === 'all' || s.religion === religionFilter;
+    const created = s.created_at ? s.created_at.substring(0, 10) : '';
+    const matchesFrom = !dateFrom || created >= dateFrom;
+    const matchesTo = !dateTo || created <= dateTo;
+    return matchesSearch && matchesGrade && matchesStatus && matchesGov && matchesLang
+      && matchesBranch && matchesNationality && matchesReligion && matchesFrom && matchesTo;
   });
+
+  const resetFilters = () => {
+    setSearchQuery(''); setGradeFilter('all'); setStatusFilter('all'); setGovFilter('');
+    setLangFilter('all'); setBranchFilter('all'); setNationalityFilter('all');
+    setReligionFilter('all'); setDateFrom(''); setDateTo('');
+  };
 
   if (loading) return <div className="text-center mt-4">جاري التحميل...</div>;
 
@@ -217,8 +249,41 @@ const AdminDashboard = () => {
             <button className="btn" style={{ backgroundColor: '#8e44ad', color: '#fff' }} onClick={exportToExcelFull}>تصدير شامل (Excel)</button>
             <button className="btn" style={{ backgroundColor: '#34495e', color: '#fff' }} onClick={exportToPDF}>طباعة / PDF</button>
           </div>
+
+          {/* فلاتر متقدمة */}
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', width: '100%' }}>
+            <input type="text" className="form-control" placeholder="المحافظة..." style={{ flex: '1', minWidth: '140px' }}
+              value={govFilter} onChange={(e) => setGovFilter(e.target.value)} />
+            <select className="form-control" style={{ flex: '1', minWidth: '140px' }} value={langFilter} onChange={(e) => setLangFilter(e.target.value)}>
+              <option value="all">كل اللغات الثانية</option>
+              <option value="french">فرنسي</option>
+              <option value="german">ألماني</option>
+              <option value="italian">إيطالي</option>
+            </select>
+            <select className="form-control" style={{ flex: '1', minWidth: '140px' }} value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
+              <option value="all">كل الشعب</option>
+              <option value="science_science">علمي علوم</option>
+              <option value="science_math">علمي رياضة</option>
+              <option value="arts">أدبي</option>
+            </select>
+            <select className="form-control" style={{ flex: '1', minWidth: '120px' }} value={nationalityFilter} onChange={(e) => setNationalityFilter(e.target.value)}>
+              <option value="all">كل الجنسيات</option>
+              <option value="egyptian">مصري</option>
+              <option value="other">غير مصري</option>
+            </select>
+            <select className="form-control" style={{ flex: '1', minWidth: '120px' }} value={religionFilter} onChange={(e) => setReligionFilter(e.target.value)}>
+              <option value="all">كل الديانات</option>
+              <option value="muslim">مسلم</option>
+              <option value="christian">مسيحي</option>
+            </select>
+            <input type="date" className="form-control" style={{ flex: '1', minWidth: '130px' }} title="من تاريخ"
+              value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            <input type="date" className="form-control" style={{ flex: '1', minWidth: '130px' }} title="إلى تاريخ"
+              value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <button className="btn" style={{ backgroundColor: '#7f8c8d', color: '#fff' }} onClick={resetFilters}>مسح الفلاتر</button>
+          </div>
         </div>
-        
+
         <h3 className="mt-4 text-right print-header" style={{ borderBottom: '1px solid #ccc', paddingBottom: '10px' }}>
           قائمة الطلبات المتقدمة {filteredStudents.length !== students.length && `(تصفية: ${filteredStudents.length} طالب)`}
         </h3>
@@ -326,7 +391,7 @@ const AdminDashboard = () => {
                 {selectedStudent.grade === '2' && (
                   <>
                     <hr style={{ borderColor: 'var(--border-color)', margin: '15px 0' }} />
-                    <p><strong>الشعبة المرجوة:</strong> {selectedStudent.branch === 'science' ? 'علمي' : 'أدبي'}</p>
+                    <p><strong>الشعبة المرجوة:</strong> {branchLabel(selectedStudent.branch)}</p>
                   </>
                 )}
               </div>

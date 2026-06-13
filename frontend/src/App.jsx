@@ -1,7 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
-import RegisterGrade1 from './pages/RegisterGrade1';
-import RegisterGrade2 from './pages/RegisterGrade2';
+import StudentRegistrationForm from './pages/StudentRegistrationForm';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import ParentDashboard from './pages/ParentDashboard';
@@ -17,8 +16,8 @@ function App() {
       <Router>
         <Routes>
           <Route path="/" element={<LandingPage />} />
-          <Route path="/register/grade-1" element={<RegisterGrade1 />} />
-          <Route path="/register/grade-2" element={<RegisterGrade2 />} />
+          <Route path="/register/grade-1" element={<StudentRegistrationForm grade={1} />} />
+          <Route path="/register/grade-2" element={<StudentRegistrationForm grade={2} />} />
           <Route path="/login" element={<Login />} />
           
           <Route 

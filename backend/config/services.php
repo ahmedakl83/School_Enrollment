@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'whatsapp' => [
+        'driver' => env('WHATSAPP_DRIVER', 'log'), // log | ultramsg
+        'instance_id' => env('WHATSAPP_INSTANCE_ID'),
+        'token' => env('WHATSAPP_TOKEN'),
+    ],
+
 ];

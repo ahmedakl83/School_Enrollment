@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 
 const ParentDashboard = () => {
   const { user, logout } = useAuth();
@@ -16,7 +16,7 @@ const ParentDashboard = () => {
 
   const fetchStudent = async () => {
     try {
-      const response = await axios.get('http://localhost:8001/api/parent/student');
+      const response = await api.get('/parent/student');
       setStudent(response.data);
     } catch (err) {
       if (err.response && err.response.status === 404) {

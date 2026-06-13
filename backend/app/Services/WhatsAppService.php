@@ -2,25 +2,76 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+
 class WhatsAppService
 {
     /**
-     * Send a WhatsApp message to a specific number.
-     * In a real application, this would integrate with Twilio, UltraMsg, or official WhatsApp API.
+     * يرسل رسالة واتساب عبر المزوّد المُعدّ في config/services.php.
+     * يدعم حالياً مزوّد UltraMsg (HTTP API). إن لم يُضبط مزوّد:
+     *  - في بيئة local: يُسجّل المحتوى في اللوج لتسهيل الاختبار.
+     *  - في الإنتاج: يُسجّل خطأً دون كشف المحتوى ويعيد false.
+     *
+     * @return bool نجاح الإرسال
      */
-    public static function sendMessage($phone, $message)
+    public function send(string $phone, string $message): bool
     {
-        // Mock sending message
-        \Illuminate\Support\Facades\Log::info("WhatsApp Message Sent to {$phone}: \n{$message}");
-        
-        // Example implementation with cURL:
-        /*
-        $url = 'https://api.whatsapp.provider/send';
-        $data = [
-            'to' => $phone,
-            'body' => $message
-        ];
-        // ... curl execution
-        */
+        $driver = config('services.whatsapp.driver', 'log');
+
+        return match ($driver) {
+            'ultramsg' => $this->sendViaUltraMsg($phone, $message),
+            default => $this->sendViaLog($phone, $message),
+        };
+    }
+
+    protected function sendViaUltraMsg(string $phone, string $message): bool
+    {
+        $instance = config('services.whatsapp.instance_id');
+        $token = config('services.whatsapp.token');
+
+        if (! $instance || ! $token) {
+            Log::error('WhatsApp (ultramsg) غير مُعدّ بشكل صحيح: instance_id/token مفقود.');
+            return false;
+        }
+
+        try {
+            $response = Http::asForm()->post("https://api.ultramsg.com/{$instance}/messages/chat", [
+                'token' => $token,
+                'to' => $this->normalizePhone($phone),
+                'body' => $message,
+            ]);
+
+            if ($response->successful()) {
+                return true;
+            }
+
+            Log::error('WhatsApp (ultramsg) فشل الإرسال', ['status' => $response->status()]);
+            return false;
+        } catch (\Throwable $e) {
+            Log::error('WhatsApp (ultramsg) استثناء: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    protected function sendViaLog(string $phone, string $message): bool
+    {
+        if (app()->environment('production')) {
+            // لا نكشف محتوى الرسالة (كلمة المرور) في سجلات الإنتاج
+            Log::warning("لم يُضبط مزوّد واتساب — تعذّر إرسال رسالة إلى {$phone}.");
+            return false;
+        }
+
+        // بيئة التطوير فقط: نسجّل المحتوى لتسهيل الاختبار اليدوي
+        Log::info("[DEV] رسالة واتساب إلى {$phone}:\n{$message}");
+        return true;
+    }
+
+    /**
+     * يحوّل الرقم المصري المحلي (01XXXXXXXXX) إلى الصيغة الدولية (201XXXXXXXXX).
+     */
+    protected function normalizePhone(string $phone): string
+    {
+        return preg_replace('/^0/', '20', $phone);
     }
 }

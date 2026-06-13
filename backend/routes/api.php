@@ -6,8 +6,8 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\AdminController;
 
-Route::post('/auth/login', [AuthController::class, 'login']);
-Route::post('/register', [StudentController::class, 'register']);
+Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+Route::post('/register', [StudentController::class, 'register'])->middleware('throttle:10,1');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -19,10 +19,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/student/{id}', [StudentController::class, 'update']);
     Route::get('/parent/student', [StudentController::class, 'myStudent']);
 
-    // Admin routes
-    Route::prefix('admin')->group(function () {
+    // مسارات الأدمن — محمية بفحص الدور (role=admin)
+    Route::prefix('admin')->middleware('admin')->group(function () {
         Route::get('/students', [AdminController::class, 'index']);
         Route::put('/student/{id}/status', [AdminController::class, 'updateStatus']);
+        Route::put('/student/{id}', [StudentController::class, 'update']);
         Route::delete('/student/{id}', [AdminController::class, 'destroy']);
         Route::get('/export/excel', [AdminController::class, 'exportExcel']);
         Route::get('/export/pdf', [AdminController::class, 'exportPdf']);
