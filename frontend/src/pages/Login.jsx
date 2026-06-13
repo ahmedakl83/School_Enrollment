@@ -6,6 +6,7 @@ import api from '../api';
 const Login = () => {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -48,27 +49,46 @@ const Login = () => {
 
         <form onSubmit={handleSubmit} style={{ textAlign: 'right' }}>
           <div className="form-group">
-            <label className="form-label">رقم الهاتف</label>
-            <input 
-              type="text" 
-              className="form-control" 
+            <label className="form-label" htmlFor="login-phone">رقم الهاتف</label>
+            <input
+              id="login-phone"
+              type="tel"
+              inputMode="numeric"
+              autoComplete="username"
+              maxLength={11}
+              placeholder="01xxxxxxxxx"
+              className="form-control"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              required 
+              required
               dir="ltr"
             />
           </div>
-          
+
           <div className="form-group">
-            <label className="form-label">كلمة المرور</label>
-            <input 
-              type="password" 
-              className="form-control" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required 
-              dir="ltr"
-            />
+            <label className="form-label" htmlFor="login-password">كلمة المرور</label>
+            <div className="input-with-toggle">
+              <input
+                id="login-password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                className="form-control"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                dir="ltr"
+                style={{ paddingInlineStart: '2.75rem' }}
+              />
+              <button
+                type="button"
+                className="toggle-btn"
+                onClick={() => setShowPassword((s) => !s)}
+                aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                title={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+              >
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
 
           <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '20px' }} disabled={loading}>

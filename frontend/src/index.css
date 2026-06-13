@@ -264,6 +264,108 @@ select.form-control {
 
 @media print { .no-print { display: none !important; } }
 
+/* Required-field marker */
+.req {
+  color: var(--error);
+  margin-right: 2px;
+  font-weight: 700;
+}
+
+/* Invalid input highlight */
+.form-control.is-invalid {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.15);
+}
+
+/* Progress step labels */
+.progress-step { position: relative; }
+
+.progress-step-label {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 50%;
+  transform: translateX(50%);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-muted);
+  transition: color 0.3s ease;
+}
+
+.progress-step.active .progress-step-label { color: var(--text-main); }
+.progress-step.completed .progress-step-label { color: var(--success); }
+
+.progress-container { margin-bottom: 3rem; }
+
+@media (max-width: 560px) {
+  .progress-step-label { font-size: 0.6rem; }
+  .progress-step { width: 30px; height: 30px; }
+}
+
+/* Auto-derived data box (from national ID) */
+.derived-box {
+  background: rgba(25, 135, 84, 0.08);
+  border: 1px solid rgba(25, 135, 84, 0.3);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.derived-box.hint {
+  background: rgba(130, 154, 177, 0.08);
+  border-color: var(--border-color);
+  color: var(--text-muted);
+}
+
+.derived-box .chip {
+  display: inline-block;
+  margin-inline-start: 0.5rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+/* Review summary on final step */
+.review-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 1.5rem;
+  background: rgba(11, 22, 34, 0.35);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.review-grid .review-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px dashed var(--border-color);
+  font-size: 0.9rem;
+}
+
+.review-grid .review-item .k { color: var(--text-muted); }
+.review-grid .review-item .v { color: var(--text-main); font-weight: 600; text-align: left; }
+
+@media (max-width: 560px) { .review-grid { grid-template-columns: 1fr; } }
+
+/* Password show/hide toggle wrapper */
+.input-with-toggle { position: relative; }
+.input-with-toggle .toggle-btn {
+  position: absolute;
+  inset-inline-start: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  padding: 0;
+}
+
 body.light-mode {
   --primary: #0F5298;
   --primary-light: #2563EB;

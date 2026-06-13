@@ -1,9 +1,51 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, FormProvider, useFormContext } from 'react-hook-form';
 import api from '../api';
 
-const PHONE_PATTERN = { value: /^01[0125][0-9]{8}$/, message: 'رقم هاتف مصري غير صحيح' };
+// حقل نصّي موحّد — يضيف الربط بالـ label وعلامة الإلزام وحالة الخطأ (مُعرّف خارج المكوّن لتفادي فقد التركيز)
+const TextField = ({ label, name, required = true, rules = {}, ...rest }) => {
+  const { register, formState: { errors } } = useFormContext();
+  return (
+    <div className="form-group">
+      <label className="form-label" htmlFor={name}>
+        {label}{required && <span className="req">*</span>}
+      </label>
+      <input
+        id={name}
+        className={`form-control ${errors[name] ? 'is-invalid' : ''}`}
+        {...register(name, { ...(required ? { required: 'مطلوب' } : {}), ...rules })}
+        {...rest}
+      />
+      {errors[name] && <span className="form-error">{errors[name].message}</span>}
+    </div>
+  );
+};
+
+const SelectField = ({ label, name, required = true, children }) => {
+  const { register, formState: { errors } } = useFormContext();
+  return (
+    <div className="form-group">
+      <label className="form-label" htmlFor={name}>
+        {label}{required && <span className="req">*</span>}
+      </label>
+      <select
+        id={name}
+        className={`form-control ${errors[name] ? 'is-invalid' : ''}`}
+        {...register(name, required ? { required: 'مطلوب' } : {})}
+      >
+        <option value="">اختر...</option>
+        {children}
+      </select>
+      {errors[name] && <span className="form-error">{errors[name].message}</span>}
+    </div>
+  );
+};
+
+const PHONE_PATTERN = { value: /^01[0125][0-9]{8}$/, message: 'رقم هاتف مصري غير صحيح (11 رقم يبدأ بـ 01)' };
+const NID_PATTERN = { value: /^[23]\d{13}$/, message: 'رقم قومي غير صحيح' };
+
+const STEP_LABELS = ['بيانات الطالب', 'الأب', 'الأم', 'جهة بديلة', 'المراجعة'];
 
 // استخلاص البيانات من الرقم القومي المصري + حساب السن في 1 أكتوبر
 const getDerivedData = (nid) => {
@@ -49,7 +91,13 @@ const getDerivedData = (nid) => {
 const StudentRegistrationForm = ({ grade }) => {
   const [step, setStep] = useState(1);
   const navigate = useNavigate();
-  const { register, handleSubmit, formState: { errors }, watch, trigger } = useForm();
+  const STORAGE_KEY = `reg_draft_grade_${grade}`;
+
+  const methods = useForm({
+    mode: 'onTouched',
+    defaultValues: JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'),
+  });
+  const { register, handleSubmit, formState: { errors }, watch, trigger, getValues } = methods;
 
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState('');
@@ -58,6 +106,17 @@ const StudentRegistrationForm = ({ grade }) => {
   const gradeLabel = grade === 1 ? 'الأول الثانوي' : 'الثاني الثانوي';
   const nationalId = watch('national_id');
   const derived = getDerivedData(nationalId);
+
+  // حفظ المسودّة تلقائياً حتى لا تضيع البيانات عند تحديث الصفحة
+  useEffect(() => {
+    const sub = watch((value) => localStorage.setItem(STORAGE_KEY, JSON.stringify(value)));
+    return () => sub.unsubscribe();
+  }, [watch, STORAGE_KEY]);
+
+  // العودة لأعلى الصفحة عند تغيير الخطوة
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [step]);
 
   const nextStep = async () => {
     let fieldsToValidate = [];
@@ -75,7 +134,14 @@ const StudentRegistrationForm = ({ grade }) => {
     }
 
     const isStepValid = await trigger(fieldsToValidate);
-    if (isStepValid) setStep((prev) => prev + 1);
+    if (isStepValid) {
+      setStep((prev) => prev + 1);
+    } else {
+      // التمرير إلى أول حقل به خطأ لمساعدة المستخدم
+      setTimeout(() => {
+        document.querySelector('.form-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+    }
   };
 
   const prevStep = () => setStep((prev) => prev - 1);
@@ -86,9 +152,11 @@ const StudentRegistrationForm = ({ grade }) => {
     try {
       const payload = { ...data, grade };
       const response = await api.post('/register', payload);
+      localStorage.removeItem(STORAGE_KEY); // مسح المسودّة بعد نجاح التسجيل
       setSuccessData(response.data);
     } catch (err) {
       setServerError(err.response?.data?.message || 'حدث خطأ غير متوقع');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setLoading(false);
     }
@@ -151,7 +219,7 @@ const StudentRegistrationForm = ({ grade }) => {
             </div>
           </div>
 
-          <div className="text-center no-print" style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+          <div className="text-center no-print" style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
             <button className="btn btn-primary" onClick={handlePrint}>طباعة الإيصال</button>
             <button className="btn" style={{ backgroundColor: '#34495e', color: 'white' }} onClick={handleDownloadTxt}>تنزيل كملف نصي</button>
             <button className="btn" onClick={() => navigate('/')}>العودة للرئيسية</button>
@@ -160,6 +228,14 @@ const StudentRegistrationForm = ({ grade }) => {
       </div>
     );
   }
+
+  // خيارات الرقم الرئيسي — تُعرض فقط الأرقام التي أُدخلت فعلاً
+  const phoneOptions = [
+    { label: 'الطالب', value: getValues('phone') },
+    { label: 'الأب', value: getValues('parent_phone') },
+    { label: 'الأم', value: getValues('mother_phone') },
+    { label: 'البديل', value: getValues('contact_phone') },
+  ].filter((o) => o.value);
 
   return (
     <div className="container mt-4">
@@ -171,48 +247,47 @@ const StudentRegistrationForm = ({ grade }) => {
         <div className="progress-container">
           {[1, 2, 3, 4, 5].map((num) => (
             <div key={num} className={`progress-step ${step >= num ? 'active' : ''} ${step > num ? 'completed' : ''}`}>
-              {num}
+              {step > num ? '✓' : num}
+              <span className="progress-step-label">{STEP_LABELS[num - 1]}</span>
             </div>
           ))}
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)}>
+        <FormProvider {...methods}>
+        <form onSubmit={handleSubmit(onSubmit)} noValidate>
           {step === 1 && (
             <div>
               <h3>البيانات الشخصية للطالب</h3>
               <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">الاسم الأول</label>
-                  <input className="form-control" {...register('first_name', { required: 'مطلوب' })} />
-                  {errors.first_name && <span className="form-error">{errors.first_name.message}</span>}
+                <TextField label="الاسم الأول" name="first_name" autoComplete="off" />
+                <TextField label="اسم الوالد" name="father_name" autoComplete="off" />
+                <TextField label="اسم الجد" name="grandfather_name" autoComplete="off" />
+                <TextField label="اللقب" name="family_name" autoComplete="off" />
+                <TextField
+                  label="الرقم القومي (14 رقم)" name="national_id"
+                  inputMode="numeric" dir="ltr" maxLength={14} rules={{ pattern: NID_PATTERN }}
+                />
+                <TextField label="كود الطالب" name="student_code" required={false} inputMode="numeric" dir="ltr" />
+              </div>
+
+              {/* رسالة مساعدة حول البيانات المستخلصة من الرقم القومي */}
+              {nationalId && nationalId.length === 14 && derived ? (
+                <div className="derived-box">
+                  ✅ تم استخلاص البيانات تلقائياً من الرقم القومي:
+                  <span className="chip">تاريخ الميلاد: {derived.birthdate}</span>
+                  <span className="chip">النوع: {derived.gender}</span>
+                  <span className="chip">السن: {derived.ageYears} سنة و{derived.ageMonths} شهر و{derived.ageDays} يوم</span>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">اسم الوالد</label>
-                  <input className="form-control" {...register('father_name', { required: 'مطلوب' })} />
-                  {errors.father_name && <span className="form-error">{errors.father_name.message}</span>}
+              ) : (
+                <div className="derived-box hint">
+                  ℹ️ أدخل الرقم القومي المكوّن من 14 رقم ليتم استخلاص تاريخ الميلاد والنوع والسن في 1 أكتوبر تلقائياً.
                 </div>
-                <div className="form-group">
-                  <label className="form-label">اسم الجد</label>
-                  <input className="form-control" {...register('grandfather_name', { required: 'مطلوب' })} />
-                  {errors.grandfather_name && <span className="form-error">{errors.grandfather_name.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">اللقب</label>
-                  <input className="form-control" {...register('family_name', { required: 'مطلوب' })} />
-                  {errors.family_name && <span className="form-error">{errors.family_name.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">الرقم القومي (14 رقم)</label>
-                  <input className="form-control" maxLength="14" {...register('national_id', { required: 'مطلوب', pattern: { value: /^[23]\d{13}$/, message: 'رقم قومي غير صحيح' } })} />
-                  {errors.national_id && <span className="form-error">{errors.national_id.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">كود الطالب</label>
-                  <input className="form-control" {...register('student_code')} />
-                </div>
+              )}
+
+              <div className="grid-2">
                 <div className="form-group">
                   <label className="form-label">تاريخ الميلاد (مستخلص تلقائياً)</label>
-                  <input className="form-control" value={derived?.birthdate || ''} readOnly disabled />
+                  <input className="form-control" value={derived?.birthdate || ''} readOnly disabled dir="ltr" />
                 </div>
                 <div className="form-group">
                   <label className="form-label">النوع (مستخلص تلقائياً)</label>
@@ -226,92 +301,51 @@ const StudentRegistrationForm = ({ grade }) => {
                     <input className="form-control" value={derived ? `${derived.ageDays} يوم` : ''} readOnly disabled placeholder="يوم" />
                   </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">رقم تليفون الطالب</label>
-                  <input className="form-control" {...register('phone', { required: 'مطلوب', pattern: PHONE_PATTERN })} />
-                  {errors.phone && <span className="form-error">{errors.phone.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">الجنسية</label>
-                  <select className="form-control" {...register('nationality', { required: 'مطلوب' })}>
-                    <option value="">اختر...</option>
-                    <option value="egyptian">مصري</option>
-                    <option value="other">غير مصري</option>
-                  </select>
-                  {errors.nationality && <span className="form-error">{errors.nationality.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">الديانة</label>
-                  <select className="form-control" {...register('religion', { required: 'مطلوب' })}>
-                    <option value="">اختر...</option>
-                    <option value="muslim">مسلم</option>
-                    <option value="christian">مسيحي</option>
-                  </select>
-                  {errors.religion && <span className="form-error">{errors.religion.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">اللغة الثانية</label>
-                  <select className="form-control" {...register('second_language', { required: 'مطلوب' })}>
-                    <option value="">اختر...</option>
-                    <option value="french">فرنسي</option>
-                    <option value="german">ألماني</option>
-                    <option value="italian">إيطالي</option>
-                  </select>
-                  {errors.second_language && <span className="form-error">{errors.second_language.message}</span>}
-                </div>
+                <TextField
+                  label="رقم تليفون الطالب" name="phone"
+                  type="tel" inputMode="numeric" dir="ltr" maxLength={11} placeholder="01xxxxxxxxx"
+                  rules={{ pattern: PHONE_PATTERN }}
+                />
+                <SelectField label="الجنسية" name="nationality">
+                  <option value="egyptian">مصري</option>
+                  <option value="other">غير مصري</option>
+                </SelectField>
+                <SelectField label="الديانة" name="religion">
+                  <option value="muslim">مسلم</option>
+                  <option value="christian">مسيحي</option>
+                </SelectField>
+                <SelectField label="اللغة الثانية" name="second_language">
+                  <option value="french">فرنسي</option>
+                  <option value="german">ألماني</option>
+                  <option value="italian">إيطالي</option>
+                </SelectField>
               </div>
 
               <h4 className="mt-4 mb-2" style={{ color: 'var(--accent)' }}>العنوان بالتفصيل</h4>
               <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">الشياخة / القرية</label>
-                  <input className="form-control" {...register('address_village', { required: 'مطلوب' })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">القسم / المركز</label>
-                  <input className="form-control" {...register('address_center', { required: 'مطلوب' })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">المحافظة</label>
-                  <input className="form-control" {...register('address_gov', { required: 'مطلوب' })} />
-                </div>
+                <TextField label="الشياخة / القرية" name="address_village" autoComplete="off" />
+                <TextField label="القسم / المركز" name="address_center" autoComplete="off" />
+                <TextField label="المحافظة" name="address_gov" autoComplete="off" />
               </div>
 
               {grade === 1 ? (
                 <>
                   <h4 className="mt-4 mb-2" style={{ color: 'var(--accent)' }}>بيانات الإعدادية</h4>
                   <div className="grid-2">
-                    <div className="form-group">
-                      <label className="form-label">مجموع الإعدادية</label>
-                      <input type="number" step="0.5" className="form-control" {...register('prep_total', { required: 'مطلوب' })} />
-                      {errors.prep_total && <span className="form-error">{errors.prep_total.message}</span>}
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">اسم مدرسة الإعدادية</label>
-                      <input className="form-control" {...register('prep_school', { required: 'مطلوب' })} />
-                      {errors.prep_school && <span className="form-error">{errors.prep_school.message}</span>}
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">رقم الجلوس</label>
-                      <input className="form-control" {...register('prep_seat_no', { required: 'مطلوب' })} />
-                      {errors.prep_seat_no && <span className="form-error">{errors.prep_seat_no.message}</span>}
-                    </div>
+                    <TextField label="مجموع الإعدادية" name="prep_total" type="number" step="0.5" inputMode="decimal" dir="ltr" />
+                    <TextField label="اسم مدرسة الإعدادية" name="prep_school" autoComplete="off" />
+                    <TextField label="رقم الجلوس" name="prep_seat_no" inputMode="numeric" dir="ltr" />
                   </div>
                 </>
               ) : (
                 <>
                   <h4 className="mt-4 mb-2" style={{ color: 'var(--accent)' }}>الشعبة / التخصص</h4>
                   <div className="grid-2">
-                    <div className="form-group">
-                      <label className="form-label">الشعبة المرغوبة</label>
-                      <select className="form-control" {...register('branch', { required: 'مطلوب' })}>
-                        <option value="">اختر...</option>
-                        <option value="science_science">علمي علوم</option>
-                        <option value="science_math">علمي رياضة</option>
-                        <option value="arts">أدبي</option>
-                      </select>
-                      {errors.branch && <span className="form-error">{errors.branch.message}</span>}
-                    </div>
+                    <SelectField label="الشعبة المرغوبة" name="branch">
+                      <option value="science_science">علمي علوم</option>
+                      <option value="science_math">علمي رياضة</option>
+                      <option value="arts">أدبي</option>
+                    </SelectField>
                   </div>
                 </>
               )}
@@ -322,35 +356,16 @@ const StudentRegistrationForm = ({ grade }) => {
             <div>
               <h3>بيانات الأب / ولي الأمر</h3>
               <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">الاسم الأول</label>
-                  <input className="form-control" {...register('parent_first_name', { required: 'مطلوب' })} />
-                  {errors.parent_first_name && <span className="form-error">{errors.parent_first_name.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">اسم الوالد</label>
-                  <input className="form-control" {...register('parent_father_name', { required: 'مطلوب' })} />
-                  {errors.parent_father_name && <span className="form-error">{errors.parent_father_name.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">اسم الجد</label>
-                  <input className="form-control" {...register('parent_grandfather_name', { required: 'مطلوب' })} />
-                  {errors.parent_grandfather_name && <span className="form-error">{errors.parent_grandfather_name.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">اللقب</label>
-                  <input className="form-control" {...register('parent_family_name', { required: 'مطلوب' })} />
-                  {errors.parent_family_name && <span className="form-error">{errors.parent_family_name.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">المهنة</label>
-                  <input className="form-control" {...register('parent_job', { required: 'مطلوب' })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">رقم التليفون</label>
-                  <input className="form-control" {...register('parent_phone', { required: 'مطلوب', pattern: PHONE_PATTERN })} />
-                  {errors.parent_phone && <span className="form-error">{errors.parent_phone.message}</span>}
-                </div>
+                <TextField label="الاسم الأول" name="parent_first_name" autoComplete="off" />
+                <TextField label="اسم الوالد" name="parent_father_name" autoComplete="off" />
+                <TextField label="اسم الجد" name="parent_grandfather_name" autoComplete="off" />
+                <TextField label="اللقب" name="parent_family_name" autoComplete="off" />
+                <TextField label="المهنة" name="parent_job" autoComplete="off" />
+                <TextField
+                  label="رقم التليفون" name="parent_phone"
+                  type="tel" inputMode="numeric" dir="ltr" maxLength={11} placeholder="01xxxxxxxxx"
+                  rules={{ pattern: PHONE_PATTERN }}
+                />
               </div>
             </div>
           )}
@@ -359,35 +374,16 @@ const StudentRegistrationForm = ({ grade }) => {
             <div>
               <h3>بيانات الأم</h3>
               <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">الاسم الأول</label>
-                  <input className="form-control" {...register('mother_first_name', { required: 'مطلوب' })} />
-                  {errors.mother_first_name && <span className="form-error">{errors.mother_first_name.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">اسم الوالد</label>
-                  <input className="form-control" {...register('mother_father_name', { required: 'مطلوب' })} />
-                  {errors.mother_father_name && <span className="form-error">{errors.mother_father_name.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">اسم الجد</label>
-                  <input className="form-control" {...register('mother_grandfather_name', { required: 'مطلوب' })} />
-                  {errors.mother_grandfather_name && <span className="form-error">{errors.mother_grandfather_name.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">اللقب</label>
-                  <input className="form-control" {...register('mother_family_name', { required: 'مطلوب' })} />
-                  {errors.mother_family_name && <span className="form-error">{errors.mother_family_name.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">المهنة</label>
-                  <input className="form-control" {...register('mother_job', { required: 'مطلوب' })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">رقم التليفون</label>
-                  <input className="form-control" {...register('mother_phone', { required: 'مطلوب', pattern: PHONE_PATTERN })} />
-                  {errors.mother_phone && <span className="form-error">{errors.mother_phone.message}</span>}
-                </div>
+                <TextField label="الاسم الأول" name="mother_first_name" autoComplete="off" />
+                <TextField label="اسم الوالد" name="mother_father_name" autoComplete="off" />
+                <TextField label="اسم الجد" name="mother_grandfather_name" autoComplete="off" />
+                <TextField label="اللقب" name="mother_family_name" autoComplete="off" />
+                <TextField label="المهنة" name="mother_job" autoComplete="off" />
+                <TextField
+                  label="رقم التليفون" name="mother_phone"
+                  type="tel" inputMode="numeric" dir="ltr" maxLength={11} placeholder="01xxxxxxxxx"
+                  rules={{ pattern: PHONE_PATTERN }}
+                />
               </div>
             </div>
           )}
@@ -396,52 +392,48 @@ const StudentRegistrationForm = ({ grade }) => {
             <div>
               <h3>بيانات شخص تواصل بديل</h3>
               <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">الاسم الأول</label>
-                  <input className="form-control" {...register('contact_first_name', { required: 'مطلوب' })} />
-                  {errors.contact_first_name && <span className="form-error">{errors.contact_first_name.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">اسم الوالد</label>
-                  <input className="form-control" {...register('contact_father_name', { required: 'مطلوب' })} />
-                  {errors.contact_father_name && <span className="form-error">{errors.contact_father_name.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">اسم الجد</label>
-                  <input className="form-control" {...register('contact_grandfather_name', { required: 'مطلوب' })} />
-                  {errors.contact_grandfather_name && <span className="form-error">{errors.contact_grandfather_name.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">اللقب</label>
-                  <input className="form-control" {...register('contact_family_name', { required: 'مطلوب' })} />
-                  {errors.contact_family_name && <span className="form-error">{errors.contact_family_name.message}</span>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">صلته بالطالب</label>
-                  <input className="form-control" {...register('contact_relation', { required: 'مطلوب' })} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">رقم التليفون</label>
-                  <input className="form-control" {...register('contact_phone', { required: 'مطلوب', pattern: PHONE_PATTERN })} />
-                  {errors.contact_phone && <span className="form-error">{errors.contact_phone.message}</span>}
-                </div>
+                <TextField label="الاسم الأول" name="contact_first_name" autoComplete="off" />
+                <TextField label="اسم الوالد" name="contact_father_name" autoComplete="off" />
+                <TextField label="اسم الجد" name="contact_grandfather_name" autoComplete="off" />
+                <TextField label="اللقب" name="contact_family_name" autoComplete="off" />
+                <TextField label="صلته بالطالب" name="contact_relation" autoComplete="off" />
+                <TextField
+                  label="رقم التليفون" name="contact_phone"
+                  type="tel" inputMode="numeric" dir="ltr" maxLength={11} placeholder="01xxxxxxxxx"
+                  rules={{ pattern: PHONE_PATTERN }}
+                />
               </div>
             </div>
           )}
 
           {step === 5 && (
             <div>
-              <h3>تأكيد البيانات واختيار رقم التواصل الرئيسي</h3>
-              <p>يرجى اختيار الرقم الذي سيستخدم في الدخول للنظام (يفضل أن يكون عليه واتساب).</p>
+              <h3>مراجعة البيانات والتأكيد</h3>
+              <p>يرجى مراجعة البيانات التالية قبل الإرسال. للتعديل استخدم زر «السابق».</p>
 
-              <div className="form-group mt-4">
-                <label className="form-label">الرقم الرئيسي</label>
-                <select className="form-control" {...register('main_contact_phone', { required: 'مطلوب' })}>
+              <div className="review-grid">
+                <div className="review-item"><span className="k">اسم الطالب</span><span className="v">{[getValues('first_name'), getValues('father_name'), getValues('grandfather_name'), getValues('family_name')].filter(Boolean).join(' ')}</span></div>
+                <div className="review-item"><span className="k">الرقم القومي</span><span className="v" dir="ltr">{getValues('national_id')}</span></div>
+                <div className="review-item"><span className="k">تاريخ الميلاد</span><span className="v" dir="ltr">{derived?.birthdate || '—'}</span></div>
+                <div className="review-item"><span className="k">النوع</span><span className="v">{derived?.gender || '—'}</span></div>
+                <div className="review-item"><span className="k">هاتف الطالب</span><span className="v" dir="ltr">{getValues('phone')}</span></div>
+                <div className="review-item"><span className="k">هاتف الأب</span><span className="v" dir="ltr">{getValues('parent_phone')}</span></div>
+                <div className="review-item"><span className="k">هاتف الأم</span><span className="v" dir="ltr">{getValues('mother_phone')}</span></div>
+                {grade === 1
+                  ? <div className="review-item"><span className="k">مجموع الإعدادية</span><span className="v">{getValues('prep_total')}</span></div>
+                  : <div className="review-item"><span className="k">الشعبة</span><span className="v">{getValues('branch')}</span></div>}
+              </div>
+
+              <h4 className="mt-4 mb-2" style={{ color: 'var(--accent)' }}>اختيار رقم التواصل الرئيسي</h4>
+              <p>الرقم الذي سيُستخدم في الدخول للنظام (يجب أن يكون عليه واتساب).</p>
+
+              <div className="form-group mt-2">
+                <label className="form-label" htmlFor="main_contact_phone">الرقم الرئيسي<span className="req">*</span></label>
+                <select id="main_contact_phone" className={`form-control ${errors.main_contact_phone ? 'is-invalid' : ''}`} {...register('main_contact_phone', { required: 'مطلوب' })}>
                   <option value="">اختر...</option>
-                  <option value={watch('phone')}>الطالب: {watch('phone')}</option>
-                  <option value={watch('parent_phone')}>الأب: {watch('parent_phone')}</option>
-                  <option value={watch('mother_phone')}>الأم: {watch('mother_phone')}</option>
-                  <option value={watch('contact_phone')}>البديل: {watch('contact_phone')}</option>
+                  {phoneOptions.map((o) => (
+                    <option key={o.label} value={o.value}>{o.label}: {o.value}</option>
+                  ))}
                 </select>
                 {errors.main_contact_phone && <span className="form-error">{errors.main_contact_phone.message}</span>}
               </div>
@@ -478,6 +470,7 @@ const StudentRegistrationForm = ({ grade }) => {
             )}
           </div>
         </form>
+        </FormProvider>
       </div>
     </div>
   );
